@@ -10,8 +10,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 2bc0bf723c542de49b49e9819813506f, type: 3}
-  m_Name: "Unit_\uC8011"
+  m_Name: "Unit_\uC8011(\uC7A1\uBAB8)"
   m_EditorClassIdentifier: Assembly-CSharp::UnitData
-  unitName: enummy
-  maxHP: 50
-  speed: 2
+  unitName: "\uC7A1\uBAB9A"
+  maxHP: 80
+  speed: 3

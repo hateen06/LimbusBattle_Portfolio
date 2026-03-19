@@ -5,5 +5,6 @@ public class UnitData : ScriptableObject
 {
     public string unitName;
     public int maxHP;
-    public int speed;
+    public int minSpeed;
+    public int maxSpeed;
 }

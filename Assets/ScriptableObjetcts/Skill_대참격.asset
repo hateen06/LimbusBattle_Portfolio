@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7833b27ca4a9864478bfb0b62a377392, type: 3}
   m_Name: "Skill_\uB300\uCC38\uACA9"
   m_EditorClassIdentifier: Assembly-CSharp::SkillData
-  skillName: "\uAE30\uBCF8\uCC38\uACA9"
+  skillName: "\uB300\uCC38\uACA9"
   basePower: 2
   coinCount: 3
-  coinppower: 3
+  coinPower: 3
