@@ -39,7 +39,7 @@ public class BattleManager : MonoBehaviour
         }
 
         // 적의 스킬 랜덤 선택
-        SkillData enemySkill = enemyUnit.SkillSlots[Random.Range(0, enemyUnit.SkillSlots.Length)];
+        SkillData enemySkill = EnemyAI.SelectSkill(enemyUnit);
 
         // 합(Clash) 판정
         ClashResult result = ClashResolver.Resolve(selectedSkill, enemySkill);
