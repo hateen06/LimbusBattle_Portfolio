@@ -3,7 +3,7 @@ using UnityEngine;
 public enum ClashWinner { Attacker, Defender , Draw}
 public class ClashResult
 {
-    public int attakcerPower;
+    public int attackerPower;
     public int defenderPower;
     public ClashWinner winner;
 }
@@ -15,7 +15,7 @@ public static class ClashResolver
         int defPower = CoinCalculator.CalculateSkillPower(defenderSkill);
 
         ClashResult result = new ClashResult();
-        result.attakcerPower = atkPower;
+        result.attackerPower = atkPower;
         result.defenderPower = defPower;
 
         if (atkPower > defPower)

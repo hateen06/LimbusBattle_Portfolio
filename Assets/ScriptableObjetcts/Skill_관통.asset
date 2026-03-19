@@ -10,7 +10,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 7833b27ca4a9864478bfb0b62a377392, type: 3}
-  m_Name: "\uAD00\uD1B5"
+  m_Name: "Skill_\uAD00\uD1B5"
   m_EditorClassIdentifier: Assembly-CSharp::SkillData
   skillName: "\uAD00\uD1B5"
   basePower: 3

@@ -10,7 +10,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 2bc0bf723c542de49b49e9819813506f, type: 3}
-  m_Name: "\uC544\uAD70"
+  m_Name: "Unit_\uC544\uAD701"
   m_EditorClassIdentifier: Assembly-CSharp::UnitData
   unitName: ally
   maxHP: 100

@@ -9,10 +9,9 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 7833b27ca4a9864478bfb0b62a377392, type: 3}
-  m_Name: "\uBC29\uC5B4"
-  m_EditorClassIdentifier: Assembly-CSharp::SkillData
-  skillName: "\uAE30\uBCF8\uCC38\uACA9"
-  basePower: 5
-  coinCount: 1
-  coinppower: 3
+  m_Script: {fileID: 11500000, guid: 2bc0bf723c542de49b49e9819813506f, type: 3}
+  m_Name: "Unit_\uC8011"
+  m_EditorClassIdentifier: Assembly-CSharp::UnitData
+  unitName: enummy
+  maxHP: 50
+  speed: 2
