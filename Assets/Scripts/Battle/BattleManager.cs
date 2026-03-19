@@ -1,6 +1,6 @@
 using UnityEngine;
 using TMPro;
-
+using UnityEngine.UI;
 public class BattleManager : MonoBehaviour
 {
     [Header("유닛")]
@@ -89,10 +89,20 @@ public class BattleManager : MonoBehaviour
         if (!enemyUnit.IsAlive)
         {
             Log("승리! 적을 쓰러뜨렸습니다!");
+            DisableButtons();
         }
         else if (!allyUnit.IsAlive)
         {
             Log("패배... 아군이 쓰러졌습니다.");
+            DisableButtons();
         }
+    }
+        private void DisableButtons()
+    {
+        // BottomPanel의 버튼들을 비활성화
+        GameObject.Find("SkillButton1").GetComponent<UnityEngine.UI.Button>().interactable = false;
+        GameObject.Find("SkillButton2").GetComponent<UnityEngine.UI.Button>().interactable = false;
+        GameObject.Find("SkillButton3").GetComponent<UnityEngine.UI.Button>().interactable = false;
+        GameObject.Find("ExecuteButton").GetComponent<UnityEngine.UI.Button>().interactable = false;
     }
 }
