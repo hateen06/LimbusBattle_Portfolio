@@ -1,6 +1,7 @@
 using UnityEngine;
 using TMPro;
 using UnityEngine.UI;
+
 public class BattleManager : MonoBehaviour
 {
     [Header("유닛")]
@@ -29,6 +30,7 @@ public class BattleManager : MonoBehaviour
         selectedSkill = allyUnit.SkillSlots[skillIndex];
         Log(selectedSkill.skillName + " 선택됨. [턴 실행] 을 누르세요.");
     }
+    private int turnCount = 0;
 
     public void OnExecuteTurn()
     {
@@ -38,58 +40,67 @@ public class BattleManager : MonoBehaviour
             return;
         }
 
+        turnCount++;
+
         SkillData enemySkill = EnemyAI.SelectSkill(enemyUnit);
 
         // 속도 비교 - 빠른 쪽이 먼저 공격
-        Unit firstUnit;
-        Unit secondUnit;
-        SkillData firstSkill;
-        SkillData secondSkill;
-
         int allySpeed = allyUnit.RollSpeed();
         int enemySpeed = enemyUnit.RollSpeed();
-        Log("속도 — 아군:" + allySpeed + " vs 적:" + enemySpeed);
 
-        if (allySpeed >= enemySpeed)
+        ClashWinner speedWinner;
+        Unit winnerUnit;
+        Unit loserUnit;
+        SkillData winnerSkill;
+        SkillData loserSkill;
+
+        if (allySpeed > enemySpeed)
         {
-            firstUnit = allyUnit;
-            secondUnit = enemyUnit;
-            firstSkill = selectedSkill;
-            secondSkill = enemySkill;
+            speedWinner = ClashWinner.Attacker;
+            winnerUnit = allyUnit;
+            loserUnit = enemyUnit;
+            winnerSkill = selectedSkill;
+            loserSkill = EnemyAI.SelectSkill(enemyUnit);
+        }
+        else if (enemySpeed > allySpeed)
+        {
+            speedWinner = ClashWinner.Defender;
+            winnerUnit = enemyUnit;
+            loserUnit = allyUnit;
+            winnerSkill = EnemyAI.SelectSkill(enemyUnit);
+            loserSkill = selectedSkill;
         }
         else
         {
-            firstUnit = enemyUnit;
-            secondUnit = allyUnit;
-            firstSkill = enemySkill;
-            secondSkill = selectedSkill;
+            speedWinner = ClashWinner.Draw;
+            winnerUnit = null;
+            loserUnit = null;
+            winnerSkill = selectedSkill;
+            loserSkill = EnemyAI.SelectSkill(enemyUnit);
         }
 
-        // 합(Clash) 판정
-        ClashResult result = ClashResolver.Resolve(firstSkill, secondSkill);
+        ClashResult result = ClashResolver.Resolve(winnerSkill, loserSkill, speedWinner);
 
-        string firstName = firstUnit == allyUnit ? "아군" : "적";
-        string secondName = secondUnit == allyUnit ? "아군" : "적";
+        string winnerName = winnerUnit == allyUnit ? "아군" : "적";
+        string loserName = loserUnit == allyUnit ? "아군" : "적";
 
-        string logMessage = "속도 — 아군:" + allySpeed + " vs 적:" + enemySpeed + "\n"
-    + firstName + " [" + firstSkill.skillName + "] 위력:" + result.attackerPower
-    + " vs " + secondName + " [" + secondSkill.skillName + "] 위력:" + result.defenderPower + "\n";
+        string logMessage = "[ " + turnCount + "턴 ]\n"
+            + "속도 — 아군:" + allySpeed + " vs 적:" + enemySpeed + "\n";
 
-        if (result.winner == ClashWinner.Attacker)
+        if (speedWinner == ClashWinner.Draw)
         {
-            int damage = result.attackerPower;
-            secondUnit.TakeDamage(damage);
-            logMessage += firstName + " 승리! " + secondName + "에게" + damage + " 데미지!";
-        }
-        else if (result.winner == ClashWinner.Defender)
-        {
-            int damage = result.defenderPower;
-            firstUnit.TakeDamage(damage);
-            logMessage += secondName + "승리! " + firstName + " 에게 "+ damage + " 데미지!";
+            logMessage += "속도 동일! 양쪽 스킬 파괴, 데미지 없음.";
         }
         else
         {
-            logMessage += "무승부! 데미지 없음.";
+            logMessage += winnerName + " 속도 승리! [" + winnerSkill.skillName + "] 위력:" + result.attackerPower + "\n";
+            logMessage += loserName + "의 [" + loserSkill.skillName + "] 파괴!\n";
+            logMessage += loserName + "에게 " + result.finalDamage + " 데미지!";
+
+            if (result.wasDefending)
+                logMessage += " (방어로 50% 감소)";
+
+            loserUnit.TakeDamage(result.finalDamage);
         }
 
         Log(logMessage);

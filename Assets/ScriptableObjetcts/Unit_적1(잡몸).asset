@@ -14,4 +14,5 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::UnitData
   unitName: "\uC7A1\uBAB9A"
   maxHP: 80
-  speed: 3
+  minSpeed: 1
+  maxSpeed: 3
