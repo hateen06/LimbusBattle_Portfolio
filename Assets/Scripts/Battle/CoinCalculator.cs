@@ -1,20 +1,29 @@
 using UnityEngine;
-using UnityEngine.Rendering;
-
-public class CoinCalculator
+public class CoinResult
 {
-    public static int CalculateSkillPower(SkillData skill)
+    public int[] coinValues;
+    public int totalPower;
+}
+public static class CoinCalculator
+{
+    public static CoinResult RollCoins(SkillData skill)
     {
-        int power = skill.basePower;
+        CoinResult result = new CoinResult();
+        result.coinValues = new int[skill.coinCount];
+
+        int currentPower = skill.basePower;
 
         for (int i = 0; i < skill.coinCount; i++)
         {
             bool isHeads = Random.Range(0, 100) < 50;
+
             if (isHeads)
-                power += skill.coinPower;
-            else
-                power -= skill.coinPower;
+                currentPower += skill.coinPower;
+
+            result.coinValues[i] = currentPower;
         }
-        return Mathf.Max(0, power);
+
+        result.totalPower = currentPower;
+        return result;
     }
 }

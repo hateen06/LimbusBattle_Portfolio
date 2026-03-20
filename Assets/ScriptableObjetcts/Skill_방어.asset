@@ -16,3 +16,4 @@ MonoBehaviour:
   basePower: 5
   coinCount: 1
   coinPower: 3
+  skillType: 1

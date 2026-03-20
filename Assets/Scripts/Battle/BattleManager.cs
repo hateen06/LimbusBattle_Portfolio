@@ -16,6 +16,7 @@ public class BattleManager : MonoBehaviour
     [SerializeField] private TextMeshProUGUI battleLogText;
 
     private SkillData selectedSkill;
+    private int turnCount = 0;
 
     private void Start()
     {
@@ -30,7 +31,6 @@ public class BattleManager : MonoBehaviour
         selectedSkill = allyUnit.SkillSlots[skillIndex];
         Log(selectedSkill.skillName + " 선택됨. [턴 실행] 을 누르세요.");
     }
-    private int turnCount = 0;
 
     public void OnExecuteTurn()
     {
@@ -44,63 +44,76 @@ public class BattleManager : MonoBehaviour
 
         SkillData enemySkill = EnemyAI.SelectSkill(enemyUnit);
 
-        // 속도 비교 - 빠른 쪽이 먼저 공격
         int allySpeed = allyUnit.RollSpeed();
         int enemySpeed = enemyUnit.RollSpeed();
 
-        ClashWinner speedWinner;
-        Unit winnerUnit;
-        Unit loserUnit;
-        SkillData winnerSkill;
-        SkillData loserSkill;
-
+        string logMessage = "[ " + turnCount + "턴 ]\n"
+            + "속도 — 아군:" + allySpeed + " vs 적:" + enemySpeed + "\n";
         if (allySpeed > enemySpeed)
         {
-            speedWinner = ClashWinner.Attacker;
-            winnerUnit = allyUnit;
-            loserUnit = enemyUnit;
-            winnerSkill = selectedSkill;
-            loserSkill = EnemyAI.SelectSkill(enemyUnit);
+            int damage = ClashResolver.RollAttackDamage(selectedSkill);
+
+            bool defending = enemySkill.skillType == SkillType.Defense;
+            if (defending)
+                damage = Mathf.RoundToInt(damage * 0.5f);
+
+            enemyUnit.TakeDamage(damage);
+            logMessage += "아군 속도 승리! 적 스킬 파괴!\n";
+            logMessage += "아군 [" + selectedSkill.skillName + "] → 적에게 " + damage + " 데미지!";
+            if (defending) logMessage += " (방어 50% 감소)";
         }
         else if (enemySpeed > allySpeed)
         {
-            speedWinner = ClashWinner.Defender;
-            winnerUnit = enemyUnit;
-            loserUnit = allyUnit;
-            winnerSkill = EnemyAI.SelectSkill(enemyUnit);
-            loserSkill = selectedSkill;
+            int damage = ClashResolver.RollAttackDamage(enemySkill);
+
+            bool defending = selectedSkill.skillType == SkillType.Defense;
+            if (defending)
+                damage = Mathf.RoundToInt(damage * 0.5f);
+
+            allyUnit.TakeDamage(damage);
+            logMessage += "적 속도 승리! 아군 스킬 파괴!\n";
+            logMessage += "적 [" + enemySkill.skillName + "] → 아군에게 " + damage + " 데미지!";
+            if (defending) logMessage += " (방어 50% 감소)";
+        }
+        else if (enemySpeed > allySpeed)
+        {
+            // 적 속도 승리 → 아군 스킬 파괴, 적 일방 공격
+            ClashResult result = ClashResolver.Resolve(enemySkill, selectedSkill);
+            int damage = result.finalDamage;
+
+            bool defending = selectedSkill.skillType == SkillType.Defense;
+            if (defending)
+                damage = Mathf.RoundToInt(damage * 0.5f);
+
+            allyUnit.TakeDamage(damage);
+            logMessage += "적 속도 승리! 아군 스킬 파괴!\n";
+            logMessage += "적 [" + enemySkill.skillName + "] → 아군에게 " + damage + " 데미지!";
+            if (defending) logMessage += " (방어 50% 감소)";
         }
         else
         {
-            speedWinner = ClashWinner.Draw;
-            winnerUnit = null;
-            loserUnit = null;
-            winnerSkill = selectedSkill;
-            loserSkill = EnemyAI.SelectSkill(enemyUnit);
-        }
+            // 속도 동일 → 합(Clash) 돌입!
+            ClashResult result = ClashResolver.Resolve(selectedSkill, enemySkill);
+            logMessage += "속도 동일! 합(Clash) 돌입!\n";
+            logMessage += result.clashLog;
 
-        ClashResult result = ClashResolver.Resolve(winnerSkill, loserSkill, speedWinner);
-
-        string winnerName = winnerUnit == allyUnit ? "아군" : "적";
-        string loserName = loserUnit == allyUnit ? "아군" : "적";
-
-        string logMessage = "[ " + turnCount + "턴 ]\n"
-            + "속도 — 아군:" + allySpeed + " vs 적:" + enemySpeed + "\n";
-
-        if (speedWinner == ClashWinner.Draw)
-        {
-            logMessage += "속도 동일! 양쪽 스킬 파괴, 데미지 없음.";
-        }
-        else
-        {
-            logMessage += winnerName + " 속도 승리! [" + winnerSkill.skillName + "] 위력:" + result.attackerPower + "\n";
-            logMessage += loserName + "의 [" + loserSkill.skillName + "] 파괴!\n";
-            logMessage += loserName + "에게 " + result.finalDamage + " 데미지!";
+            if (result.winner == ClashWinner.Attacker)
+            {
+                enemyUnit.TakeDamage(result.finalDamage);
+                logMessage += "아군 승리! 적에게 " + result.finalDamage + " 데미지!";
+            }
+            else if (result.winner == ClashWinner.Defender)
+            {
+                allyUnit.TakeDamage(result.finalDamage);
+                logMessage += "적 역전! 아군에게 " + result.finalDamage + " 데미지!";
+            }
+            else
+            {
+                logMessage += "양쪽 코인 소진! 데미지 없음.";
+            }
 
             if (result.wasDefending)
-                logMessage += " (방어로 50% 감소)";
-
-            loserUnit.TakeDamage(result.finalDamage);
+                logMessage += " (방어 50% 감소)";
         }
 
         Log(logMessage);
@@ -136,12 +149,12 @@ public class BattleManager : MonoBehaviour
             DisableButtons();
         }
     }
-        private void DisableButtons()
+
+    private void DisableButtons()
     {
-        // BottomPanel의 버튼들을 비활성화
-        GameObject.Find("SkillButton1").GetComponent<UnityEngine.UI.Button>().interactable = false;
-        GameObject.Find("SkillButton2").GetComponent<UnityEngine.UI.Button>().interactable = false;
-        GameObject.Find("SkillButton3").GetComponent<UnityEngine.UI.Button>().interactable = false;
-        GameObject.Find("ExecuteButton").GetComponent<UnityEngine.UI.Button>().interactable = false;
+        GameObject.Find("SkillButton1").GetComponent<Button>().interactable = false;
+        GameObject.Find("SkillButton2").GetComponent<Button>().interactable = false;
+        GameObject.Find("SkillButton3").GetComponent<Button>().interactable = false;
+        GameObject.Find("ExecuteButton").GetComponent<Button>().interactable = false;
     }
 }
