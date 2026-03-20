@@ -1,9 +1,12 @@
+using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
 public class BattleManager : MonoBehaviour
 {
+    private const int MaxLogEntries = 6;
+
     [Header("유닛")]
     [SerializeField] private Unit allyUnit;
     [SerializeField] private Unit enemyUnit;
@@ -15,6 +18,7 @@ public class BattleManager : MonoBehaviour
     [SerializeField] private TextMeshProUGUI enemyHPText;
     [SerializeField] private TextMeshProUGUI battleLogText;
 
+    private readonly List<string> battleLogs = new List<string>();
     private SkillData selectedSkill;
     private int turnCount;
 
@@ -23,7 +27,7 @@ public class BattleManager : MonoBehaviour
         if (allyUnit == null || enemyUnit == null)
         {
             ClearLog();
-            Log("BattleManager에 유닛 참조가 연결되지 않았습니다.");
+            Log("※ 전투 준비 실패");
             enabled = false;
             return;
         }
@@ -33,20 +37,20 @@ public class BattleManager : MonoBehaviour
 
         UpdateUI();
         ClearLog();
-        Log("전투 시작! 사용할 스킬을 선택하세요.");
+        Log("▶ 전투 시작");
     }
 
     public void OnSkillSelected(int skillIndex)
     {
         if (allyUnit == null || allyUnit.SkillSlots == null)
         {
-            Log("아군 스킬 슬롯을 찾을 수 없습니다.");
+            Log("※ 아군 스킬 슬롯 없음");
             return;
         }
 
         if (skillIndex < 0 || skillIndex >= allyUnit.SkillSlots.Length)
         {
-            Log("잘못된 스킬 번호입니다.");
+            Log("※ 잘못된 스킬 선택");
             return;
         }
 
@@ -54,11 +58,11 @@ public class BattleManager : MonoBehaviour
 
         if (selectedSkill == null)
         {
-            Log("이 슬롯에는 스킬이 없습니다.");
+            Log("※ 비어 있는 슬롯");
             return;
         }
 
-        Log("선택한 스킬: [" + selectedSkill.skillName + "]");
+        Log("▷ 선택: " + selectedSkill.skillName);
     }
 
     public void OnExecuteTurn()
@@ -72,7 +76,7 @@ public class BattleManager : MonoBehaviour
 
         if (enemySkill == null)
         {
-            Log("적이 사용할 수 있는 스킬이 없습니다.");
+            Log("※ 적 스킬 없음");
             return;
         }
 
@@ -82,7 +86,9 @@ public class BattleManager : MonoBehaviour
         int enemySpeed = enemyUnit.RollSpeed();
 
         TurnResolutionResult turnResult = BattleTurnResolver.ResolveTurn(
+            allyUnit,
             selectedSkill,
+            enemyUnit,
             enemySkill,
             allySpeed,
             enemySpeed);
@@ -97,7 +103,7 @@ public class BattleManager : MonoBehaviour
             allyUnit.TakeDamage(turnResult.damageToAlly);
         }
 
-        Log("[ " + turnCount + "턴 ]\n" + turnResult.logMessage);
+        Log("[ " + turnCount + "턴 ] " + turnResult.logMessage);
         UpdateUI();
         CheckBattleEnd();
 
@@ -108,13 +114,13 @@ public class BattleManager : MonoBehaviour
     {
         if (selectedSkill == null)
         {
-            Log("먼저 스킬을 선택하세요.");
+            Log("※ 스킬을 먼저 선택하세요");
             return false;
         }
 
         if (!allyUnit.IsAlive || !enemyUnit.IsAlive)
         {
-            Log("이미 전투가 끝났습니다.");
+            Log("※ 전투 종료");
             return false;
         }
 
@@ -146,12 +152,12 @@ public class BattleManager : MonoBehaviour
 
     private void ClearLog()
     {
-        if (battleLogText == null)
-        {
-            return;
-        }
+        battleLogs.Clear();
 
-        battleLogText.text = string.Empty;
+        if (battleLogText != null)
+        {
+            battleLogText.text = string.Empty;
+        }
     }
 
     private void Log(string message)
@@ -161,34 +167,35 @@ public class BattleManager : MonoBehaviour
             return;
         }
 
-        if (string.IsNullOrEmpty(battleLogText.text))
+        battleLogs.Add(message);
+
+        while (battleLogs.Count > MaxLogEntries)
         {
-            battleLogText.text = message;
-            return;
+            battleLogs.RemoveAt(0);
         }
 
-        battleLogText.text += "\n\n" + message;
+        battleLogText.text = string.Join("\n", battleLogs);
     }
 
     private void CheckBattleEnd()
     {
         if (!allyUnit.IsAlive && !enemyUnit.IsAlive)
         {
-            Log("무승부! 양쪽 유닛이 모두 쓰러졌습니다.");
+            Log("◆ 무승부");
             DisableButtons();
             return;
         }
 
         if (!enemyUnit.IsAlive)
         {
-            Log("승리! 적을 쓰러뜨렸습니다.");
+            Log("★ 승리");
             DisableButtons();
             return;
         }
 
         if (!allyUnit.IsAlive)
         {
-            Log("패배... 아군이 쓰러졌습니다.");
+            Log("X 패배");
             DisableButtons();
         }
     }

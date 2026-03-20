@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 public class Unit : MonoBehaviour
@@ -5,6 +6,7 @@ public class Unit : MonoBehaviour
     [SerializeField] private UnitData unitData;
     [SerializeField] private SkillData[] skillSlots = new SkillData[3];
 
+    private readonly List<StatusEffect> statusEffects = new List<StatusEffect>();
     private int currentHP;
     private bool isAlive = true;
 
@@ -27,6 +29,8 @@ public class Unit : MonoBehaviour
 
     public void Initialize()
     {
+        statusEffects.Clear();
+
         if (unitData == null)
         {
             currentHP = 0;
@@ -36,6 +40,67 @@ public class Unit : MonoBehaviour
 
         currentHP = unitData.maxHP;
         isAlive = currentHP > 0;
+    }
+
+    public void AddBleed(int potency, int count)
+    {
+        if (!isAlive || potency <= 0 || count <= 0)
+        {
+            return;
+        }
+
+        StatusEffect bleed = GetBleed();
+
+        if (bleed == null)
+        {
+            statusEffects.Add(new StatusEffect(StatusType.Bleed, potency, count));
+            return;
+        }
+
+        bleed.potency += potency;
+        bleed.count += count;
+    }
+
+    public int ConsumeBleedOnAttack(int triggerCount)
+    {
+        if (!isAlive || triggerCount <= 0)
+        {
+            return 0;
+        }
+
+        StatusEffect bleed = GetBleed();
+
+        if (bleed == null || bleed.potency <= 0 || bleed.count <= 0)
+        {
+            return 0;
+        }
+
+        int actualTriggerCount = Mathf.Min(triggerCount, bleed.count);
+        int damage = bleed.potency * actualTriggerCount;
+
+        TakeDamage(damage);
+
+        bleed.count -= actualTriggerCount;
+
+        if (bleed.count <= 0)
+        {
+            statusEffects.Remove(bleed);
+        }
+
+        return damage;
+    }
+
+    public StatusEffect GetBleed()
+    {
+        for (int i = 0; i < statusEffects.Count; i++)
+        {
+            if (statusEffects[i].type == StatusType.Bleed)
+            {
+                return statusEffects[i];
+            }
+        }
+
+        return null;
     }
 
     public void TakeDamage(int damage)

@@ -41,7 +41,9 @@ public static class ClashResolver
     private const int ClashSafetyLimit = 20;
 
     public static ClashResult ResolveAttackClash(
+        Unit attackerUnit,
         SkillData attackerSkill,
+        Unit defenderUnit,
         SkillData defenderSkill,
         int attackerSpeed,
         int defenderSpeed)
@@ -49,14 +51,40 @@ public static class ClashResolver
         ClashResult result = new ClashResult();
         StringBuilder logBuilder = new StringBuilder();
 
-        int attackerCoins = attackerSkill != null ? attackerSkill.coinCount : 0;
-        int defenderCoins = defenderSkill != null ? defenderSkill.coinCount : 0;
+        if (attackerUnit == null || defenderUnit == null || attackerSkill == null || defenderSkill == null)
+        {
+            result.winner = ClashWinner.Draw;
+            result.finalDamage = 0;
+            result.clashLog = "※ 합 처리 실패";
+            return result;
+        }
+
+        int attackerCoins = attackerSkill.coinCount;
+        int defenderCoins = defenderSkill.coinCount;
         int roundIndex = 1;
         int clashCount = 0;
 
         while (attackerCoins > 0 && defenderCoins > 0 && clashCount < ClashSafetyLimit)
         {
             clashCount++;
+
+            int attackerBleedDamage = attackerUnit.ConsumeBleedOnAttack(1);
+            int defenderBleedDamage = defenderUnit.ConsumeBleedOnAttack(1);
+
+            if (attackerBleedDamage > 0)
+            {
+                AppendShortBleedLog(logBuilder, attackerUnit, attackerBleedDamage);
+            }
+
+            if (defenderBleedDamage > 0)
+            {
+                AppendShortBleedLog(logBuilder, defenderUnit, defenderBleedDamage);
+            }
+
+            if (!attackerUnit.IsAlive || !defenderUnit.IsAlive)
+            {
+                break;
+            }
 
             SkillPowerRollResult attackerRoll = CoinCalculator.RollSkillPower(attackerSkill, attackerCoins);
             SkillPowerRollResult defenderRoll = CoinCalculator.RollSkillPower(defenderSkill, defenderCoins);
@@ -68,46 +96,33 @@ public static class ClashResolver
                 defenderRoll = defenderRoll
             };
 
-            logBuilder.Append("합 ");
-            logBuilder.Append(roundIndex);
-            logBuilder.Append(": ");
-            logBuilder.Append(CoinCalculator.BuildRollSummary(attackerRoll));
-            logBuilder.Append(" vs ");
-            logBuilder.Append(CoinCalculator.BuildRollSummary(defenderRoll));
-
             if (attackerRoll.finalPower > defenderRoll.finalPower)
             {
                 defenderCoins--;
                 roundResult.roundWinner = ClashWinner.Attacker;
-                logBuilder.Append(" -> 수비 측 코인 1개 파괴");
             }
             else if (defenderRoll.finalPower > attackerRoll.finalPower)
             {
                 attackerCoins--;
                 roundResult.roundWinner = ClashWinner.Defender;
-                logBuilder.Append(" -> 공격 측 코인 1개 파괴");
             }
             else if (attackerSpeed > defenderSpeed)
             {
                 defenderCoins--;
                 roundResult.roundWinner = ClashWinner.Attacker;
                 roundResult.resolvedBySpeed = true;
-                logBuilder.Append(" -> 위력이 같아서 공격 측이 속도로 우세");
             }
             else if (defenderSpeed > attackerSpeed)
             {
                 attackerCoins--;
                 roundResult.roundWinner = ClashWinner.Defender;
                 roundResult.resolvedBySpeed = true;
-                logBuilder.Append(" -> 위력이 같아서 수비 측이 속도로 우세");
             }
             else
             {
                 roundResult.roundWinner = ClashWinner.Draw;
-                logBuilder.Append(" -> 완전 동점, 같은 코인으로 다시 합");
             }
 
-            logBuilder.AppendLine();
             result.rounds.Add(roundResult);
             roundIndex++;
         }
@@ -115,42 +130,117 @@ public static class ClashResolver
         result.attackerRemainingCoins = attackerCoins;
         result.defenderRemainingCoins = defenderCoins;
 
-        if (attackerCoins > 0 && defenderCoins == 0)
+        if (!attackerUnit.IsAlive && !defenderUnit.IsAlive)
+        {
+            result.winner = ClashWinner.Draw;
+            result.finalDamage = 0;
+            AppendLine(logBuilder, "● 양측 출혈 | ◆ 무승부");
+        }
+        else if (!attackerUnit.IsAlive)
+        {
+            result.winner = ClashWinner.Defender;
+            result.finalDamage = 0;
+            AppendLine(logBuilder, "● " + attackerUnit.UnitName + " 출혈 | ◆ 행동 실패");
+        }
+        else if (!defenderUnit.IsAlive)
         {
             result.winner = ClashWinner.Attacker;
-            result.finalAttackRoll = CoinCalculator.RollSkillPower(attackerSkill, attackerCoins);
-            result.finalDamage = Mathf.Max(0, result.finalAttackRoll.finalPower);
-
-            logBuilder.Append("공격 측 합 승리. 마무리 공격: ");
-            logBuilder.Append(CoinCalculator.BuildRollSummary(result.finalAttackRoll));
-            logBuilder.AppendLine();
+            result.finalDamage = 0;
+            AppendLine(logBuilder, "● " + defenderUnit.UnitName + " 출혈 | ◆ 전투 불가");
+        }
+        else if (attackerCoins > 0 && defenderCoins == 0)
+        {
+            result.winner = ClashWinner.Attacker;
+            ResolveFinalAttack(result, attackerUnit, attackerSkill, defenderUnit, attackerCoins, "◆ 합 승리", logBuilder);
         }
         else if (defenderCoins > 0 && attackerCoins == 0)
         {
             result.winner = ClashWinner.Defender;
-            result.finalAttackRoll = CoinCalculator.RollSkillPower(defenderSkill, defenderCoins);
-            result.finalDamage = Mathf.Max(0, result.finalAttackRoll.finalPower);
-
-            logBuilder.Append("수비 측 합 승리. 반격: ");
-            logBuilder.Append(CoinCalculator.BuildRollSummary(result.finalAttackRoll));
-            logBuilder.AppendLine();
+            ResolveFinalAttack(result, defenderUnit, defenderSkill, attackerUnit, defenderCoins, "◆ 합 패배", logBuilder);
         }
         else
         {
             result.winner = ClashWinner.Draw;
             result.finalDamage = 0;
-            logBuilder.AppendLine("합이 너무 오래 이어져 이번 공격은 무효 처리되었습니다.");
+            AppendLine(logBuilder, "◆ 합 무승부");
         }
 
         result.clashLog = logBuilder.ToString().TrimEnd();
         return result;
+    }
+
+    private static void ResolveFinalAttack(
+        ClashResult result,
+        Unit attackerUnit,
+        SkillData attackSkill,
+        Unit defenderUnit,
+        int remainingCoins,
+        string label,
+        StringBuilder logBuilder)
+    {
+        int bleedDamage = attackerUnit.ConsumeBleedOnAttack(remainingCoins);
+
+        if (bleedDamage > 0)
+        {
+            AppendShortBleedLog(logBuilder, attackerUnit, bleedDamage);
+        }
+
+        if (!attackerUnit.IsAlive)
+        {
+            result.finalDamage = 0;
+            AppendLine(logBuilder, label + " | ● 출혈로 공격 실패");
+            return;
+        }
+
+        result.finalAttackRoll = CoinCalculator.RollSkillPower(attackSkill, remainingCoins);
+        result.finalDamage = Mathf.Max(0, result.finalAttackRoll.finalPower);
+
+        AppendLine(logBuilder, label + " | ■ 피해 " + result.finalDamage);
+
+        if (result.finalDamage > 0)
+        {
+            ApplyBleedOnHit(defenderUnit, attackSkill, logBuilder);
+        }
+    }
+
+    private static void AppendShortBleedLog(StringBuilder logBuilder, Unit unit, int damage)
+    {
+        AppendLine(logBuilder, "● " + unit.UnitName + " -" + damage);
+    }
+
+    private static void ApplyBleedOnHit(Unit targetUnit, SkillData attackSkill, StringBuilder logBuilder)
+    {
+        if (targetUnit == null || attackSkill == null)
+        {
+            return;
+        }
+
+        if (attackSkill.bleedPotency <= 0 || attackSkill.bleedCount <= 0)
+        {
+            return;
+        }
+
+        targetUnit.AddBleed(attackSkill.bleedPotency, attackSkill.bleedCount);
+        AppendLine(logBuilder, "● 출혈 +" + attackSkill.bleedPotency + "/" + attackSkill.bleedCount);
+    }
+
+    private static void AppendLine(StringBuilder builder, string text)
+    {
+        if (builder.Length > 0)
+        {
+            builder.Append(" | ");
+        }
+
+        builder.Append(text);
     }
 }
 
 public static class BattleTurnResolver
 {
     public static TurnResolutionResult ResolveTurn(
+        Unit allyUnit,
         SkillData allySkill,
+        Unit enemyUnit,
         SkillData enemySkill,
         int allySpeed,
         int enemySpeed)
@@ -158,161 +248,194 @@ public static class BattleTurnResolver
         TurnResolutionResult result = new TurnResolutionResult();
         StringBuilder logBuilder = new StringBuilder();
 
-        logBuilder.Append("속도: 아군 ");
-        logBuilder.Append(allySpeed);
-        logBuilder.Append(" / 적 ");
-        logBuilder.Append(enemySpeed);
-        logBuilder.AppendLine();
-        logBuilder.Append("선택 스킬: 아군 [");
-        logBuilder.Append(GetSkillName(allySkill));
-        logBuilder.Append("] / 적 [");
-        logBuilder.Append(GetSkillName(enemySkill));
-        logBuilder.AppendLine("]");
-
-        if (allySkill == null || enemySkill == null)
+        if (allyUnit == null || enemyUnit == null || allySkill == null || enemySkill == null)
         {
-            logBuilder.Append("스킬 참조가 없어서 턴을 처리할 수 없습니다.");
-            result.logMessage = logBuilder.ToString();
+            result.logMessage = "※ 전투 정보 없음";
             return result;
         }
 
+        AppendSegment(logBuilder, "▲ 속도 " + allySpeed + ":" + enemySpeed);
+        AppendSegment(logBuilder, "◆ " + allySkill.skillName + " vs " + enemySkill.skillName);
+
         if (allySkill.skillType == SkillType.Attack && enemySkill.skillType == SkillType.Attack)
         {
-            ClashResult clashResult = ClashResolver.ResolveAttackClash(allySkill, enemySkill, allySpeed, enemySpeed);
-            logBuilder.AppendLine(clashResult.clashLog);
+            ClashResult clashResult = ClashResolver.ResolveAttackClash(
+                allyUnit,
+                allySkill,
+                enemyUnit,
+                enemySkill,
+                allySpeed,
+                enemySpeed);
 
             if (clashResult.winner == ClashWinner.Attacker)
             {
                 result.damageToEnemy = clashResult.finalDamage;
-                logBuilder.Append("결과: 아군이 ");
-                logBuilder.Append(clashResult.finalDamage);
-                logBuilder.Append(" 데미지를 입혔습니다.");
             }
             else if (clashResult.winner == ClashWinner.Defender)
             {
                 result.damageToAlly = clashResult.finalDamage;
-                logBuilder.Append("결과: 적이 ");
-                logBuilder.Append(clashResult.finalDamage);
-                logBuilder.Append(" 데미지를 입혔습니다.");
-            }
-            else
-            {
-                logBuilder.Append("결과: 이번 합은 무승부로 끝났습니다.");
             }
 
+            AppendSegment(logBuilder, clashResult.clashLog);
             result.logMessage = logBuilder.ToString();
             return result;
         }
 
         if (allySkill.skillType == SkillType.Attack && enemySkill.skillType == SkillType.Defense)
         {
-            ResolveAttackVsDefense(allySkill, enemySkill, true, result, logBuilder);
+            ResolveAttackVsDefense(allyUnit, allySkill, enemyUnit, enemySkill, true, result, logBuilder);
             result.logMessage = logBuilder.ToString();
             return result;
         }
 
         if (enemySkill.skillType == SkillType.Attack && allySkill.skillType == SkillType.Defense)
         {
-            ResolveAttackVsDefense(enemySkill, allySkill, false, result, logBuilder);
+            ResolveAttackVsDefense(enemyUnit, enemySkill, allyUnit, allySkill, false, result, logBuilder);
             result.logMessage = logBuilder.ToString();
             return result;
         }
 
         if (allySkill.skillType == SkillType.Attack && enemySkill.skillType == SkillType.Evade)
         {
-            ResolveAttackVsEvade(allySkill, enemySkill, true, result, logBuilder);
+            ResolveAttackVsEvade(allyUnit, allySkill, enemyUnit, enemySkill, true, result, logBuilder);
             result.logMessage = logBuilder.ToString();
             return result;
         }
 
         if (enemySkill.skillType == SkillType.Attack && allySkill.skillType == SkillType.Evade)
         {
-            ResolveAttackVsEvade(enemySkill, allySkill, false, result, logBuilder);
+            ResolveAttackVsEvade(enemyUnit, enemySkill, allyUnit, allySkill, false, result, logBuilder);
             result.logMessage = logBuilder.ToString();
             return result;
         }
 
-        logBuilder.Append("공격 스킬이 사용되지 않아서 이번 턴에는 체력 변화가 없습니다.");
+        AppendSegment(logBuilder, "■ 피해 없음");
         result.logMessage = logBuilder.ToString();
         return result;
     }
 
     private static void ResolveAttackVsDefense(
+        Unit attackerUnit,
         SkillData attackSkill,
+        Unit defenderUnit,
         SkillData defenseSkill,
         bool allyIsAttacker,
         TurnResolutionResult result,
         StringBuilder logBuilder)
     {
+        int bleedDamage = attackerUnit.ConsumeBleedOnAttack(attackSkill.coinCount);
+
+        if (bleedDamage > 0)
+        {
+            AppendSegment(logBuilder, "● " + attackerUnit.UnitName + " -" + bleedDamage);
+        }
+
+        if (!attackerUnit.IsAlive)
+        {
+            AppendSegment(logBuilder, "● 출혈로 공격 실패");
+            return;
+        }
+
         SkillPowerRollResult attackRoll = CoinCalculator.RollSkillPower(attackSkill);
         SkillPowerRollResult defenseRoll = CoinCalculator.RollSkillPower(defenseSkill);
         int reducedDamage = Mathf.Max(0, attackRoll.finalPower - defenseRoll.finalPower);
 
-        logBuilder.Append("공격 굴림: ");
-        logBuilder.AppendLine(CoinCalculator.BuildRollSummary(attackRoll));
-        logBuilder.Append("방어 굴림: ");
-        logBuilder.AppendLine(CoinCalculator.BuildRollSummary(defenseRoll));
+        AppendSegment(logBuilder, "▣ 방어 " + defenseRoll.finalPower);
+        AppendSegment(logBuilder, "■ 피해 " + reducedDamage);
 
         if (allyIsAttacker)
         {
             result.damageToEnemy = reducedDamage;
-            logBuilder.Append("결과: 적이 ");
-            logBuilder.Append(defenseRoll.finalPower);
-            logBuilder.Append("만큼 막아서 ");
-            logBuilder.Append(reducedDamage);
-            logBuilder.Append(" 데미지를 받았습니다.");
         }
         else
         {
             result.damageToAlly = reducedDamage;
-            logBuilder.Append("결과: 아군이 ");
-            logBuilder.Append(defenseRoll.finalPower);
-            logBuilder.Append("만큼 막아서 ");
-            logBuilder.Append(reducedDamage);
-            logBuilder.Append(" 데미지를 받았습니다.");
+        }
+
+        if (reducedDamage > 0)
+        {
+            ApplyBleedOnHit(defenderUnit, attackSkill, logBuilder);
         }
     }
 
     private static void ResolveAttackVsEvade(
+        Unit attackerUnit,
         SkillData attackSkill,
+        Unit evadeUnit,
         SkillData evadeSkill,
         bool allyIsAttacker,
         TurnResolutionResult result,
         StringBuilder logBuilder)
     {
+        int bleedDamage = attackerUnit.ConsumeBleedOnAttack(attackSkill.coinCount);
+
+        if (bleedDamage > 0)
+        {
+            AppendSegment(logBuilder, "● " + attackerUnit.UnitName + " -" + bleedDamage);
+        }
+
+        if (!attackerUnit.IsAlive)
+        {
+            AppendSegment(logBuilder, "● 출혈로 공격 실패");
+            return;
+        }
+
         SkillPowerRollResult attackRoll = CoinCalculator.RollSkillPower(attackSkill);
         SkillPowerRollResult evadeRoll = CoinCalculator.RollSkillPower(evadeSkill);
         bool evaded = evadeRoll.finalPower >= attackRoll.finalPower;
 
-        logBuilder.Append("공격 굴림: ");
-        logBuilder.AppendLine(CoinCalculator.BuildRollSummary(attackRoll));
-        logBuilder.Append("회피 굴림: ");
-        logBuilder.AppendLine(CoinCalculator.BuildRollSummary(evadeRoll));
-
         if (evaded)
         {
-            logBuilder.Append("결과: 회피에 성공해서 데미지가 없습니다.");
+            AppendSegment(logBuilder, "◇ 회피 성공");
             return;
         }
+
+        AppendSegment(logBuilder, "◇ 회피 실패");
+        AppendSegment(logBuilder, "■ 피해 " + attackRoll.finalPower);
 
         if (allyIsAttacker)
         {
             result.damageToEnemy = attackRoll.finalPower;
-            logBuilder.Append("결과: 회피에 실패해서 적이 ");
-            logBuilder.Append(attackRoll.finalPower);
-            logBuilder.Append(" 데미지를 받았습니다.");
         }
         else
         {
             result.damageToAlly = attackRoll.finalPower;
-            logBuilder.Append("결과: 회피에 실패해서 아군이 ");
-            logBuilder.Append(attackRoll.finalPower);
-            logBuilder.Append(" 데미지를 받았습니다.");
+        }
+
+        if (attackRoll.finalPower > 0)
+        {
+            ApplyBleedOnHit(evadeUnit, attackSkill, logBuilder);
         }
     }
 
-    private static string GetSkillName(SkillData skill)
+    private static void ApplyBleedOnHit(Unit targetUnit, SkillData attackSkill, StringBuilder logBuilder)
     {
-        return skill != null ? skill.skillName : "없음";
+        if (targetUnit == null || attackSkill == null)
+        {
+            return;
+        }
+
+        if (attackSkill.bleedPotency <= 0 || attackSkill.bleedCount <= 0)
+        {
+            return;
+        }
+
+        targetUnit.AddBleed(attackSkill.bleedPotency, attackSkill.bleedCount);
+        AppendSegment(logBuilder, "● 출혈 +" + attackSkill.bleedPotency + "/" + attackSkill.bleedCount);
+    }
+
+    private static void AppendSegment(StringBuilder builder, string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return;
+        }
+
+        if (builder.Length > 0)
+        {
+            builder.Append(" | ");
+        }
+
+        builder.Append(text);
     }
 }
