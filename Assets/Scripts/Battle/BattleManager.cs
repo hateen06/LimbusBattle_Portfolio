@@ -1,5 +1,5 @@
-using UnityEngine;
 using TMPro;
+using UnityEngine;
 using UnityEngine.UI;
 
 public class BattleManager : MonoBehaviour
@@ -16,134 +16,177 @@ public class BattleManager : MonoBehaviour
     [SerializeField] private TextMeshProUGUI battleLogText;
 
     private SkillData selectedSkill;
-    private int turnCount = 0;
+    private int turnCount;
 
     private void Start()
     {
+        if (allyUnit == null || enemyUnit == null)
+        {
+            ClearLog();
+            Log("BattleManager에 유닛 참조가 연결되지 않았습니다.");
+            enabled = false;
+            return;
+        }
+
         allyUnit.Initialize();
         enemyUnit.Initialize();
+
         UpdateUI();
-        Log("전투 시작! 스킬을 선택하세요.");
+        ClearLog();
+        Log("전투 시작! 사용할 스킬을 선택하세요.");
     }
 
     public void OnSkillSelected(int skillIndex)
     {
+        if (allyUnit == null || allyUnit.SkillSlots == null)
+        {
+            Log("아군 스킬 슬롯을 찾을 수 없습니다.");
+            return;
+        }
+
+        if (skillIndex < 0 || skillIndex >= allyUnit.SkillSlots.Length)
+        {
+            Log("잘못된 스킬 번호입니다.");
+            return;
+        }
+
         selectedSkill = allyUnit.SkillSlots[skillIndex];
-        Log(selectedSkill.skillName + " 선택됨. [턴 실행] 을 누르세요.");
+
+        if (selectedSkill == null)
+        {
+            Log("이 슬롯에는 스킬이 없습니다.");
+            return;
+        }
+
+        Log("선택한 스킬: [" + selectedSkill.skillName + "]");
     }
 
     public void OnExecuteTurn()
     {
-        if (selectedSkill == null)
+        if (!CanExecuteTurn())
         {
-            Log("스킬을 먼저 선택하세요!");
+            return;
+        }
+
+        SkillData enemySkill = EnemyAI.SelectSkill(enemyUnit);
+
+        if (enemySkill == null)
+        {
+            Log("적이 사용할 수 있는 스킬이 없습니다.");
             return;
         }
 
         turnCount++;
 
-        SkillData enemySkill = EnemyAI.SelectSkill(enemyUnit);
-
         int allySpeed = allyUnit.RollSpeed();
         int enemySpeed = enemyUnit.RollSpeed();
 
-        string logMessage = "[ " + turnCount + "턴 ]\n"
-            + "속도 — 아군:" + allySpeed + " vs 적:" + enemySpeed + "\n";
-        if (allySpeed > enemySpeed)
+        TurnResolutionResult turnResult = BattleTurnResolver.ResolveTurn(
+            selectedSkill,
+            enemySkill,
+            allySpeed,
+            enemySpeed);
+
+        if (turnResult.damageToEnemy > 0)
         {
-            int damage = ClashResolver.RollAttackDamage(selectedSkill);
-
-            bool defending = enemySkill.skillType == SkillType.Defense;
-            if (defending)
-                damage = Mathf.RoundToInt(damage * 0.5f);
-
-            enemyUnit.TakeDamage(damage);
-            logMessage += "아군 속도 승리! 적 스킬 파괴!\n";
-            logMessage += "아군 [" + selectedSkill.skillName + "] → 적에게 " + damage + " 데미지!";
-            if (defending) logMessage += " (방어 50% 감소)";
-        }
-        else if (enemySpeed > allySpeed)
-        {
-            int damage = ClashResolver.RollAttackDamage(enemySkill);
-
-            bool defending = selectedSkill.skillType == SkillType.Defense;
-            if (defending)
-                damage = Mathf.RoundToInt(damage * 0.5f);
-
-            allyUnit.TakeDamage(damage);
-            logMessage += "적 속도 승리! 아군 스킬 파괴!\n";
-            logMessage += "적 [" + enemySkill.skillName + "] → 아군에게 " + damage + " 데미지!";
-            if (defending) logMessage += " (방어 50% 감소)";
-        }
-        else if (enemySpeed > allySpeed)
-        {
-            // 적 속도 승리 → 아군 스킬 파괴, 적 일방 공격
-            ClashResult result = ClashResolver.Resolve(enemySkill, selectedSkill);
-            int damage = result.finalDamage;
-
-            bool defending = selectedSkill.skillType == SkillType.Defense;
-            if (defending)
-                damage = Mathf.RoundToInt(damage * 0.5f);
-
-            allyUnit.TakeDamage(damage);
-            logMessage += "적 속도 승리! 아군 스킬 파괴!\n";
-            logMessage += "적 [" + enemySkill.skillName + "] → 아군에게 " + damage + " 데미지!";
-            if (defending) logMessage += " (방어 50% 감소)";
-        }
-        else
-        {
-            // 속도 동일 → 합(Clash) 돌입!
-            ClashResult result = ClashResolver.Resolve(selectedSkill, enemySkill);
-            logMessage += "속도 동일! 합(Clash) 돌입!\n";
-            logMessage += result.clashLog;
-
-            if (result.winner == ClashWinner.Attacker)
-            {
-                enemyUnit.TakeDamage(result.finalDamage);
-                logMessage += "아군 승리! 적에게 " + result.finalDamage + " 데미지!";
-            }
-            else if (result.winner == ClashWinner.Defender)
-            {
-                allyUnit.TakeDamage(result.finalDamage);
-                logMessage += "적 역전! 아군에게 " + result.finalDamage + " 데미지!";
-            }
-            else
-            {
-                logMessage += "양쪽 코인 소진! 데미지 없음.";
-            }
-
-            if (result.wasDefending)
-                logMessage += " (방어 50% 감소)";
+            enemyUnit.TakeDamage(turnResult.damageToEnemy);
         }
 
-        Log(logMessage);
+        if (turnResult.damageToAlly > 0)
+        {
+            allyUnit.TakeDamage(turnResult.damageToAlly);
+        }
+
+        Log("[ " + turnCount + "턴 ]\n" + turnResult.logMessage);
         UpdateUI();
         CheckBattleEnd();
 
         selectedSkill = null;
     }
 
+    private bool CanExecuteTurn()
+    {
+        if (selectedSkill == null)
+        {
+            Log("먼저 스킬을 선택하세요.");
+            return false;
+        }
+
+        if (!allyUnit.IsAlive || !enemyUnit.IsAlive)
+        {
+            Log("이미 전투가 끝났습니다.");
+            return false;
+        }
+
+        return true;
+    }
+
     private void UpdateUI()
     {
-        allyNameText.text = allyUnit.UnitName;
-        allyHPText.text = allyUnit.CurrentHP + "/" + allyUnit.MaxHP;
-        enemyNameText.text = enemyUnit.UnitName;
-        enemyHPText.text = enemyUnit.CurrentHP + "/" + enemyUnit.MaxHP;
+        if (allyNameText != null)
+        {
+            allyNameText.text = allyUnit.UnitName;
+        }
+
+        if (allyHPText != null)
+        {
+            allyHPText.text = allyUnit.CurrentHP + "/" + allyUnit.MaxHP;
+        }
+
+        if (enemyNameText != null)
+        {
+            enemyNameText.text = enemyUnit.UnitName;
+        }
+
+        if (enemyHPText != null)
+        {
+            enemyHPText.text = enemyUnit.CurrentHP + "/" + enemyUnit.MaxHP;
+        }
+    }
+
+    private void ClearLog()
+    {
+        if (battleLogText == null)
+        {
+            return;
+        }
+
+        battleLogText.text = string.Empty;
     }
 
     private void Log(string message)
     {
-        battleLogText.text = message;
+        if (battleLogText == null)
+        {
+            return;
+        }
+
+        if (string.IsNullOrEmpty(battleLogText.text))
+        {
+            battleLogText.text = message;
+            return;
+        }
+
+        battleLogText.text += "\n\n" + message;
     }
 
     private void CheckBattleEnd()
     {
+        if (!allyUnit.IsAlive && !enemyUnit.IsAlive)
+        {
+            Log("무승부! 양쪽 유닛이 모두 쓰러졌습니다.");
+            DisableButtons();
+            return;
+        }
+
         if (!enemyUnit.IsAlive)
         {
-            Log("승리! 적을 쓰러뜨렸습니다!");
+            Log("승리! 적을 쓰러뜨렸습니다.");
             DisableButtons();
+            return;
         }
-        else if (!allyUnit.IsAlive)
+
+        if (!allyUnit.IsAlive)
         {
             Log("패배... 아군이 쓰러졌습니다.");
             DisableButtons();
@@ -152,9 +195,26 @@ public class BattleManager : MonoBehaviour
 
     private void DisableButtons()
     {
-        GameObject.Find("SkillButton1").GetComponent<Button>().interactable = false;
-        GameObject.Find("SkillButton2").GetComponent<Button>().interactable = false;
-        GameObject.Find("SkillButton3").GetComponent<Button>().interactable = false;
-        GameObject.Find("ExecuteButton").GetComponent<Button>().interactable = false;
+        SetButtonInteractable("SkillButton1", false);
+        SetButtonInteractable("SkillButton2", false);
+        SetButtonInteractable("SkillButton3", false);
+        SetButtonInteractable("ExecuteButton", false);
+    }
+
+    private void SetButtonInteractable(string objectName, bool interactable)
+    {
+        GameObject buttonObject = GameObject.Find(objectName);
+
+        if (buttonObject == null)
+        {
+            return;
+        }
+
+        Button button = buttonObject.GetComponent<Button>();
+
+        if (button != null)
+        {
+            button.interactable = interactable;
+        }
     }
 }
